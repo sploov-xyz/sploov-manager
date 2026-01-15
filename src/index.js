@@ -9,19 +9,43 @@ import { handleInteractionCreate } from './events/interactionCreate.js';
 import { handleGitHubWebhook } from './services/githubWebhook.js';
 
 function validateConfig() {
-  const required = ['DISCORD_TOKEN', 'CLIENT_ID', 'GUILD_ID', 'WELCOME_CHANNEL_ID', 'ANNOUNCEMENT_CHANNEL_ID', 'GITHUB_WEBHOOK_SECRET'];
+  const required = [
+    'DISCORD_TOKEN',
+    'CLIENT_ID',
+    'GUILD_ID',
+    'WELCOME_CHANNEL_ID',
+    'ANNOUNCEMENT_CHANNEL_ID',
+    'GITHUB_WEBHOOK_SECRET'
+  ];
+
   for (const env of required) {
     if (!process.env[env]) {
       logger.error('SYSTEM', `Missing required environment variable: ${env}`);
       process.exit(1);
     }
   }
+
   logger.info('SYSTEM', 'Configuration validated successfully');
 }
 
 validateConfig();
 
+/* =========================
+   CREATE DISCORD CLIENT FIRST
+   ========================= */
+
+const client = createClient();
+
+handleReady(client);
+handleGuildMemberAdd(client);
+handleInteractionCreate(client);
+
+/* =========================
+   EXPRESS APP
+   ========================= */
+
 const app = express();
+
 app.use(
   express.json({
     verify: (req, res, buf) => {
@@ -30,16 +54,19 @@ app.use(
   })
 );
 
-app.post('/github/webhook', (req, res) => handleGitHubWebhook(req, res, client));
+/* ✅ NOW client is defined */
+app.post('/github/webhook', (req, res) =>
+  handleGitHubWebhook(req, res, client)
+);
 
 const port = process.env.PORT || 3000;
-app.listen(port, () => logger.info('SYSTEM', `Webhook server listening on port ${port}`));
+app.listen(port, () =>
+  logger.info('SYSTEM', `Webhook server listening on port ${port}`)
+);
 
-const client = createClient();
-
-handleReady(client);
-handleGuildMemberAdd(client);
-handleInteractionCreate(client);
+/* =========================
+   PROCESS SAFETY
+   ========================= */
 
 process.on('unhandledRejection', (reason, promise) => {
   logger.error('SYSTEM', `Unhandled Rejection at: ${promise}, reason: ${reason}`);
@@ -52,11 +79,13 @@ process.on('uncaughtException', (error) => {
 
 process.on('SIGTERM', async () => {
   logger.info('SYSTEM', 'Received SIGTERM, shutting down gracefully...');
-  if (client) {
-    await client.destroy();
-  }
+  await client.destroy();
   process.exit(0);
 });
+
+/* =========================
+   LOGIN LAST
+   ========================= */
 
 client.login(process.env.DISCORD_TOKEN).catch((error) => {
   logger.error('BOT', `Failed to login: ${error.message}`);
