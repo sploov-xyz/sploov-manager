@@ -22,7 +22,13 @@ function validateConfig() {
 validateConfig();
 
 const app = express();
-app.use(express.json());
+app.use(
+  express.json({
+    verify: (req, res, buf) => {
+      req.rawBody = buf;
+    }
+  })
+);
 
 app.post('/github/webhook', (req, res) => handleGitHubWebhook(req, res, client));
 
